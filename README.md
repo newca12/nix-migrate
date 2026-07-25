@@ -1,6 +1,6 @@
 # nix-migrate
 
-A high-performance, Nix-aware machine migration assistant built in Rust. It scans home directories, classifies unmanaged files, and generates targeted backup scripts and restoration checklists. It exposes its capabilities via the standard **Model Context Protocol (MCP)**, enabling AI agents (such as Claude or opencode) to reason about unfamiliar application files and automate the backup process.
+A high-performance, Nix-aware machine migration assistant built in Rust. It scans home directories, classifies unmanaged files, and generates targeted backup scripts and restoration checklists. It exposes its capabilities via the standard **Model Context Protocol (MCP)**, enabling opencode to reason about unfamiliar application files and automate the backup process.
 
 ---
 
@@ -38,13 +38,13 @@ When migrating to a new machine, it is difficult to determine which files are **
 ```
                                   MCP Protocol
 ┌─────────────────────────────┐                  ┌──────────────────────────────┐
-│  Rust Binary (nix-migrate)  │ ◄──────────────► │  Any MCP Client              │
-│  (Fast Scanner + Tools)     │                  │  (opencode, Claude Desktop,  │
-│                             │                  │   VS Code, etc.)             │
-│  Tools:                     │                  │                              │
-│  - scan_home()              │                  │  • LLM reasoning layer       │
-│  - generate_backup_script() │                  │  • Interactively asks user   │
-│  - generate_restore_check() │                  │  • Safely executes scripts   │
+│  Rust Binary (nix-migrate)  │ ◄──────────────► │  MCP Client (opencode)       │
+│  (Fast Scanner + Tools)     │                  │                              │
+│                             │                  │  • LLM reasoning layer       │
+│  Tools:                     │                  │  • Interactively asks user   │
+│  - scan_home()              │                  │  • Safely executes scripts   │
+│  - generate_backup_script() │                  │                              │
+│  - generate_restore_check() │                  │                              │
 └─────────────────────────────┘                  └──────────────────────────────┘
 ```
 
@@ -125,23 +125,25 @@ __pycache__
 
 ---
 
-## 🔌 MCP Client Configuration
+## 🔌 opencode Integration
 
-To integrate `nix-migrate` into Claude Desktop, add the following to your configuration file (typically `~/.config/Claude/claude_desktop_config.json`):
+To integrate `nix-migrate` as a local MCP server in **opencode**, add the following server entry to your configuration file (typically `~/.config/opencode/opencode.json`):
 
 ```json
 {
-  "mcpServers": {
-    "nix-migrate": {
-      "command": "nix",
-      "args": [
-        "develop",
-        "/path/to/nix-migrate",
-        "-c",
-        "cargo",
-        "run",
-        "--release"
-      ]
+  "mcp": {
+    "servers": {
+      "nix-migrate": {
+        "command": "nix",
+        "args": [
+          "develop",
+          "/path/to/nix-migrate",
+          "-c",
+          "cargo",
+          "run",
+          "--release"
+        ]
+      }
     }
   }
 }
