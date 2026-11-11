@@ -107,7 +107,7 @@ impl NixMigrateServer {
 }
 
 /// Runs the Nix Migrate MCP Server over stdio.
-pub async fn run_server() -> anyhow::Result<()> {
+pub async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
     let server = NixMigrateServer::new();
     let service = server
         .serve((tokio::io::stdin(), tokio::io::stdout()))
