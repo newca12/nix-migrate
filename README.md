@@ -1,156 +1,113 @@
 # nix-migrate
 
-A high-performance, Nix-aware machine migration assistant built in Rust. It scans home directories, classifies unmanaged files, and generates targeted backup scripts and restoration checklists. It exposes its capabilities via the standard **Model Context Protocol (MCP)**, enabling opencode to reason about unfamiliar application files and automate the backup process.
+`nix-migrate` is a Nix-aware filesystem scanner and local Model Context Protocol (MCP) server. It helps you find files that may need manual migration, then generates a backup script and a restore checklist for you to review.
 
----
+The scanner is deterministic and does not use an embedded LLM. Any reasoning happens in the MCP client.
 
-## 🚀 The Problem
+## Features
 
-When migrating to a new machine, it is difficult to determine which files are **not** managed by your declarative Nix configuration (e.g. NixOS/home-manager) and must be backed up manually.
-* Traditional backup tools (`mackup`, `rsync`) do not understand `/nix/store/` symlinks.
-* Dotfile trackers (`chezmoi`) only list files they already track.
-* Statically hardcoding known configuration directories creates brittle, high-maintenance databases.
+- Scans a directory tree without following directory symlinks.
+- Resolves symlink targets to identify paths under `/nix/store` as `Managed`.
+- Applies `.nix-migrate-ignore` patterns before classification.
+- Classifies scan results as `Managed`, `Config`, `Data`, `Cache`, `Secrets`, or `Unknown`.
+- Exposes scan, backup-script, and restore-checklist tools over stdio MCP.
+- Generates scripts that preserve relative paths, avoid shell interpolation of file names, use a private umask, skip special filesystem entries, and stop on copy errors.
 
-`nix-migrate` solves this by introducing a **hybrid architecture**:
-1. **The Fast Scanner (Rust Binary)**: Deterministically traverses the filesystem, filters ignores, recursively resolves symlinks to check if they point into `/nix/store/`, and categorizes unmanaged files based on high-performance heuristics.
-2. **The Reasoning Layer (LLM/MCP Client)**: Uses the scanner's structured output via MCP to research unfamiliar application paths, ask about ambiguous credentials, and orchestrate the migration.
+Classification is heuristic: review results before relying on them for a migration.
 
----
+| Classification | Meaning |
+| --- | --- |
+| `Managed` | Resolves into `/nix/store`; excluded from backups. |
+| `Config` | Likely application or shell configuration. |
+| `Data` | Likely user files or local application state. |
+| `Cache` | Likely temporary or regenerable data; excluded from backups. |
+| `Secrets` | Likely credentials, tokens, or key material. |
+| `Unknown` | Needs manual review. |
 
-## 🛠️ Features
+## Safety and privacy
 
-* **Nix-Aware Symlink Resolution**: Resolves symlinks recursively (using `std::fs::canonicalize`) to detect if they ultimately point into `/nix/store/`.
-* **Early Recursion Pruning**: If a directory itself is symlinked to the Nix store, `nix-migrate` skips walking its children, preventing redundant scans of thousands of read-only store files.
-* **Heuristic File Classification**: Automatically categorizes unmanaged paths into:
-  - `Managed`: Pointing to Nix store.
-  - `Config`: Configuration files (e.g. `.toml`, `.json`, `.yaml`, `.conf`, `rc` files).
-  - `Data`: Local sqlite databases, application share files, documents.
-  - `Cache`: Package manager registries, target builds, standard caches (skipped during backup).
-  - `Secrets`: SSH private keys, credentials, tokens, `.env` files.
-  - `Unknown`: Unclassified paths needing LLM/user review.
-* **Robust Path Filtering (`.nix-migrate-ignore`)**: Standard ignore list supporting comments, empty lines, root-relative patterns (`/pattern`), and component-matching.
-* **First-Class MCP Server**: Exposes filesystem scanning, backup script generation, and checklist generation as standard JSON-RPC tools over stdio.
+- The scanner reads directory entries and metadata; it does not read the contents of scanned files. It does read the selected ignore file.
+- Scan results include file paths and symlink targets. Only scan directories whose names and structure you are comfortable sharing with your MCP client.
+- The server runs as a local stdio process, with the permissions of the user who starts it. A client can request a scan of any directory that user can access.
+- The generated backup script is not executed by the server. Review it before running. It excludes `Managed` and `Cache` entries, does not recursively copy directory entries, and preserves symlinks rather than following them.
+- The script creates a new destination with `umask 077` and refuses to overwrite an existing destination. Choose a destination that does not already exist. Backups can still contain private keys, tokens, or personal data: encrypt them before transferring or storing them elsewhere.
 
----
+## MCP tools
 
-## 📐 Hybrid Architecture
+### `scan_home`
 
-```
-                                  MCP Protocol
-┌─────────────────────────────┐                  ┌──────────────────────────────┐
-│  Rust Binary (nix-migrate)  │ ◄──────────────► │  MCP Client (opencode)       │
-│  (Fast Scanner + Tools)     │                  │                              │
-│                             │                  │  • LLM reasoning layer       │
-│  Tools:                     │                  │  • Interactively asks user   │
-│  - scan_home()              │                  │  • Safely executes scripts   │
-│  - generate_backup_script() │                  │                              │
-│  - generate_restore_check() │                  │                              │
-└─────────────────────────────┘                  └──────────────────────────────┘
-```
+Scans a directory and returns its classified items.
 
----
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `path` | No | Directory to scan; defaults to the server's current working directory. |
+| `ignore_file` | No | Path to a custom `.nix-migrate-ignore` file. By default, the scanner looks for that file in the scan root. |
 
-## 🎛️ Exposed MCP Tools
+Each item includes its absolute path, path relative to the scan root, classification, size, file-type flags, a UTF-8 path indicator (`path_is_utf8`), and a symlink target when applicable. Non-UTF-8 paths are represented lossily for reporting and are not copied by generated scripts.
 
-The server runs on standard input/output (stdio) and exposes three primary tools:
+### `generate_backup_script`
 
-### 1. `scan_home`
-Scans a target directory, filters out ignored paths, resolves symlinks, and returns a JSON list of categorized files and folders.
-* **Parameters**:
-  - `path` (string, optional): Directory to scan (defaults to current directory).
-  - `ignore_file` (string, optional): Path to a custom ignore file.
+Accepts the `items` returned by `scan_home` and returns a Bash script. The script backs up `Config`, `Data`, `Secrets`, and `Unknown` items. It does not back up `Managed` or `Cache` items.
 
-### 2. `generate_backup_script`
-Generates a portable bash script (`backup.sh`) designed to copy unmanaged configurations, secrets, and data safely into a specified destination.
-* **Parameters**:
-  - `items` (array of ScannedItem): The categorized list returned by `scan_home`.
+### `generate_restore_checklist`
 
-### 3. `generate_restore_checklist`
-Generates a beautifully structured Markdown restoration checklist, helping you restore each category on your new machine with safety tips (e.g. private key file permissions).
-* **Parameters**:
-  - `items` (array of ScannedItem): The categorized list returned by `scan_home`.
+Accepts the same `items` and returns a Markdown checklist. File names are rendered as code so unusual names cannot introduce extra checklist content.
 
----
+## Ignore file
 
-## 📦 Local Setup & Development
+Create `.nix-migrate-ignore` in the scan root to skip entries. Blank lines and lines beginning with `#` are ignored. A plain name matches that path component anywhere in the tree; a leading `/` makes a pattern relative to the scan root. Wildcards are not supported.
 
-Because this project is built inside a **NixOS WSL** environment, development dependencies are declared in `flake.nix` and managed via **direnv**.
-
-### 1. Install & Allow direnv
-```bash
-direnv allow
-```
-
-### 2. Check & Build
-Always run commands wrapped in the Nix shell environment:
-```bash
-# Verify compilation
-nix develop -c cargo check
-
-# Run Clippy (warnings treated as errors)
-nix develop -c cargo clippy -- -D warnings
-
-# Execute test suite
-nix develop -c cargo test
-
-# Build optimized release binary
-nix develop -c cargo build --release
-```
-
----
-
-## ⚙️ Configuration (`.nix-migrate-ignore`)
-
-Place a `.nix-migrate-ignore` file in the root of the directory you want to scan to filter out large build folders, system files, or unneeded directories:
-
-```ini
-# Ignore standard package manager caches
+```text
+# Match these components anywhere
 node_modules
-.cargo/registry
-.cargo/git
-.npm
-
-# Ignore VCS
-.git
-
-# Ignore root-level folders only
-/downloads
-/videos
-
-# Ignore specific caches
 .cache
 __pycache__
-.pytest_cache
+
+# Match only these paths from the scan root
+/Downloads
+/Videos
 ```
 
----
+## Run and develop
 
-## 🔌 opencode Integration
+The Nix flake provides the application package and a development shell. From the repository root:
 
-To integrate `nix-migrate` as a local MCP server in **opencode**, add the following server entry to your configuration file (typically `~/.config/opencode/opencode.json`):
+```bash
+# Start the stdio MCP server
+nix run .
 
-```json
-{
-  "mcp": {
-    "servers": {
-      "nix-migrate": {
-        "command": "nix",
-        "args": [
-          "develop",
-          "/path/to/nix-migrate",
-          "-c",
-          "cargo",
-          "run",
-          "--release"
-        ]
-      }
-    }
-  }
-}
+# Enter the development environment
+nix develop
+
+# Validate changes
+nix develop -c cargo fmt --check
+nix develop -c cargo check --locked
+nix develop -c cargo clippy --locked -- -D warnings
+nix develop -c cargo test --locked
+
+# Build the Nix package
+nix build
 ```
 
----
+The server waits for MCP JSON-RPC messages on standard input and writes responses to standard output; it is not an interactive command-line scanner.
 
-## 📄 License
+## OpenCode and other MCP clients
 
-This project is licensed under the MIT License.
+Register `nix-migrate` as a **local stdio MCP server** in your client. The command to launch the flake from another working directory is:
+
+```text
+nix run /absolute/path/to/nix-migrate
+```
+
+Replace the example path with the repository's absolute path. MCP configuration formats vary by client and version; use the current configuration reference for your client rather than copying an outdated config schema.
+
+## Project layout
+
+- `src/scanner/` — ignore parsing, symlink checks, traversal, and classification.
+- `src/mcp/` — stdio MCP server and tool definitions.
+- `src/output/` — backup-script and restore-checklist generation.
+- `ARCHITECTURE.md` — implementation and trust-boundary notes.
+
+## License
+
+MIT; see [LICENSE](LICENSE).

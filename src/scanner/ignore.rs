@@ -10,18 +10,23 @@ pub struct IgnoreList {
 impl IgnoreList {
     /// Loads patterns from a .nix-migrate-ignore file.
     pub fn load_from_file(path: &Path) -> std::io::Result<Self> {
-        let mut patterns = Vec::new();
-        if path.exists() {
-            let file = File::open(path)?;
-            let reader = BufReader::new(file);
-            for line in reader.lines() {
-                let line = line?;
-                let trimmed = line.trim();
-                if trimmed.is_empty() || trimmed.starts_with('#') {
-                    continue;
-                }
-                patterns.push(trimmed.to_string());
+        let file = match File::open(path) {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(IgnoreList::default());
             }
+            Err(error) => return Err(error),
+        };
+
+        let mut patterns = Vec::new();
+        let reader = BufReader::new(file);
+        for line in reader.lines() {
+            let line = line?;
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') {
+                continue;
+            }
+            patterns.push(trimmed.to_string());
         }
         Ok(IgnoreList { patterns })
     }
@@ -99,6 +104,17 @@ mod tests {
         // Non-ignored paths
         assert!(!list.is_ignored(&root.join("src"), root));
         assert!(!list.is_ignored(&root.join("Cargo.toml"), root));
+
+        Ok(())
+    }
+
+    #[test]
+    fn missing_ignore_file_means_no_patterns() -> std::io::Result<()> {
+        let dir = tempdir()?;
+        let missing_file = dir.path().join("does-not-exist");
+
+        let list = IgnoreList::load_from_file(&missing_file)?;
+        assert!(list.patterns().is_empty());
 
         Ok(())
     }

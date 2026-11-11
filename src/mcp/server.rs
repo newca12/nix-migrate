@@ -11,7 +11,7 @@ use std::path::PathBuf;
 #[derive(Serialize, Deserialize, JsonSchema, Default)]
 pub struct ScanParams {
     /// The path of the directory to scan (defaults to the current directory if empty).
-    pub path: String,
+    pub path: Option<String>,
     /// Optional path to a custom .nix-migrate-ignore file.
     pub ignore_file: Option<String>,
 }
@@ -53,15 +53,21 @@ impl NixMigrateServer {
         &self,
         params: rmcp::handler::server::wrapper::Parameters<ScanParams>,
     ) -> Result<Json<ScanResult>, String> {
-        let path_str = if params.0.path.is_empty() {
-            ".".to_string()
-        } else {
-            params.0.path.clone()
-        };
+        let path_str = params
+            .0
+            .path
+            .filter(|path| !path.is_empty())
+            .unwrap_or_else(|| ".".to_string());
 
-        let root_path = PathBuf::from(&path_str);
-        if !root_path.exists() {
-            return Err(format!("Path does not exist: {:?}", root_path));
+        let requested_path = PathBuf::from(&path_str);
+        let root_path = std::fs::canonicalize(&requested_path).map_err(|error| {
+            format!(
+                "Failed to resolve scan path {:?}: {}",
+                requested_path, error
+            )
+        })?;
+        if !root_path.is_dir() {
+            return Err(format!("Scan path is not a directory: {:?}", root_path));
         }
 
         // Determine ignore file path
@@ -73,8 +79,12 @@ impl NixMigrateServer {
         let ignore_list = IgnoreList::load_from_file(&ignore_file_path)
             .map_err(|e| format!("Failed to load ignore file: {}", e))?;
 
-        let scanner = Scanner::new(root_path, ignore_list);
-        let items = scanner.scan();
+        let scan_root = root_path.clone();
+        let items =
+            tokio::task::spawn_blocking(move || Scanner::new(scan_root, ignore_list).scan())
+                .await
+                .map_err(|error| format!("Scanner task failed: {}", error))?
+                .map_err(|error| format!("Failed to scan {:?}: {}", root_path, error))?;
 
         Ok(Json(ScanResult { items }))
     }
@@ -114,4 +124,17 @@ pub async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     service.waiting().await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scan_path_is_optional_in_json() -> Result<(), serde_json::Error> {
+        let params: ScanParams = serde_json::from_str("{}")?;
+        assert!(params.path.is_none());
+        assert!(params.ignore_file.is_none());
+        Ok(())
+    }
 }

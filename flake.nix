@@ -48,7 +48,10 @@
 
           meta = with pkgs.lib; {
             description = "High-performance Nix migration MCP server and scanner";
+            homepage = "https://github.com/newca12/nix-migrate";
             mainProgram = "nix-migrate";
+            license = licenses.mit;
+            platforms = platforms.unix;
           };
         };
       in {
