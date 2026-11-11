@@ -1,4 +1,4 @@
-use crate::scanner::traversal::{ScannedItem, Classification};
+use crate::scanner::traversal::{Classification, ScannedItem};
 
 /// Generates a Markdown checklist for restoration on the new machine.
 pub fn generate_restore_checklist(items: &[ScannedItem]) -> String {
@@ -9,12 +9,30 @@ pub fn generate_restore_checklist(items: &[ScannedItem]) -> String {
     markdown.push_str("## Summary of Backed-Up Items\n\n");
 
     let total = items.len();
-    let managed = items.iter().filter(|i| i.classification == Classification::Managed).count();
-    let cache = items.iter().filter(|i| i.classification == Classification::Cache).count();
-    let config = items.iter().filter(|i| i.classification == Classification::Config).count();
-    let data = items.iter().filter(|i| i.classification == Classification::Data).count();
-    let secrets = items.iter().filter(|i| i.classification == Classification::Secrets).count();
-    let unknown = items.iter().filter(|i| i.classification == Classification::Unknown).count();
+    let managed = items
+        .iter()
+        .filter(|i| i.classification == Classification::Managed)
+        .count();
+    let cache = items
+        .iter()
+        .filter(|i| i.classification == Classification::Cache)
+        .count();
+    let config = items
+        .iter()
+        .filter(|i| i.classification == Classification::Config)
+        .count();
+    let data = items
+        .iter()
+        .filter(|i| i.classification == Classification::Data)
+        .count();
+    let secrets = items
+        .iter()
+        .filter(|i| i.classification == Classification::Secrets)
+        .count();
+    let unknown = items
+        .iter()
+        .filter(|i| i.classification == Classification::Unknown)
+        .count();
 
     markdown.push_str(&format!("- **Total items scanned**: {}\n", total));
     markdown.push_str(&format!("- **Nix-managed (skipped)**: {}\n", managed));
@@ -27,8 +45,14 @@ pub fn generate_restore_checklist(items: &[ScannedItem]) -> String {
     if secrets > 0 {
         markdown.push_str("## 🔐 Secrets Restoration Checklist\n\n");
         markdown.push_str("Secrets must be handled manually with extreme care.\n\n");
-        for item in items.iter().filter(|i| i.classification == Classification::Secrets) {
-            markdown.push_str(&format!("- [ ] Restore `{}` to original location\n", item.path));
+        for item in items
+            .iter()
+            .filter(|i| i.classification == Classification::Secrets)
+        {
+            markdown.push_str(&format!(
+                "- [ ] Restore `{}` to original location\n",
+                item.path
+            ));
             if let Some(desc) = &item.description {
                 markdown.push_str(&format!("  * Reason: {}\n", desc));
             }
@@ -39,7 +63,10 @@ pub fn generate_restore_checklist(items: &[ScannedItem]) -> String {
     if config > 0 {
         markdown.push_str("## ⚙️ Configuration Restoration Checklist\n\n");
         markdown.push_str("Verify which configurations are now managed by Nix/home-manager before copying these files back.\n\n");
-        for item in items.iter().filter(|i| i.classification == Classification::Config) {
+        for item in items
+            .iter()
+            .filter(|i| i.classification == Classification::Config)
+        {
             markdown.push_str(&format!("- [ ] Restore `{}`\n", item.path));
             if let Some(desc) = &item.description {
                 markdown.push_str(&format!("  * Reason: {}\n", desc));
@@ -51,7 +78,10 @@ pub fn generate_restore_checklist(items: &[ScannedItem]) -> String {
     if data > 0 {
         markdown.push_str("## 📁 User Data Restoration Checklist\n\n");
         markdown.push_str("Restore state/share data for applications to avoid losing local application state.\n\n");
-        for item in items.iter().filter(|i| i.classification == Classification::Data) {
+        for item in items
+            .iter()
+            .filter(|i| i.classification == Classification::Data)
+        {
             markdown.push_str(&format!("- [ ] Restore `{}`\n", item.path));
             if let Some(desc) = &item.description {
                 markdown.push_str(&format!("  * Reason: {}\n", desc));
@@ -62,9 +92,17 @@ pub fn generate_restore_checklist(items: &[ScannedItem]) -> String {
 
     if unknown > 0 {
         markdown.push_str("## ❓ Unclassified Items Restoration Checklist\n\n");
-        markdown.push_str("These items could not be automatically identified. Please inspect them manually.\n\n");
-        for item in items.iter().filter(|i| i.classification == Classification::Unknown) {
-            markdown.push_str(&format!("- [ ] Inspect and restore `{}` if needed\n", item.path));
+        markdown.push_str(
+            "These items could not be automatically identified. Please inspect them manually.\n\n",
+        );
+        for item in items
+            .iter()
+            .filter(|i| i.classification == Classification::Unknown)
+        {
+            markdown.push_str(&format!(
+                "- [ ] Inspect and restore `{}` if needed\n",
+                item.path
+            ));
             if let Some(desc) = &item.description {
                 markdown.push_str(&format!("  * Reason: {}\n", desc));
             }

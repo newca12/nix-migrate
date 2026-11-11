@@ -1,2 +1,2 @@
-pub mod script;
 pub mod checklist;
+pub mod script;

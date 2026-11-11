@@ -1,12 +1,12 @@
-use std::path::PathBuf;
-use rmcp::{tool, tool_router, ServiceExt};
-use rmcp::handler::server::wrapper::Json;
-use serde::{Serialize, Deserialize};
-use schemars::JsonSchema;
-use crate::scanner::ignore::IgnoreList;
-use crate::scanner::traversal::{Scanner, ScannedItem};
-use crate::output::script::generate_backup_script;
 use crate::output::checklist::generate_restore_checklist;
+use crate::output::script::generate_backup_script;
+use crate::scanner::ignore::IgnoreList;
+use crate::scanner::traversal::{ScannedItem, Scanner};
+use rmcp::handler::server::wrapper::Json;
+use rmcp::{ServiceExt, tool, tool_router};
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 #[derive(Serialize, Deserialize, JsonSchema, Default)]
 pub struct ScanParams {
@@ -45,7 +45,10 @@ impl NixMigrateServer {
     }
 
     /// Scans a directory and classifies all non-managed files versus Nix-managed files.
-    #[tool(name = "scan_home", description = "Scan a directory and classify files by Nix-management state and category")]
+    #[tool(
+        name = "scan_home",
+        description = "Scan a directory and classify files by Nix-management state and category"
+    )]
     pub async fn scan_home(
         &self,
         params: rmcp::handler::server::wrapper::Parameters<ScanParams>,
@@ -77,7 +80,10 @@ impl NixMigrateServer {
     }
 
     /// Generates a bash backup script targeting the scanned files.
-    #[tool(name = "generate_backup_script", description = "Generate a bash script to back up unmanaged configurations, secrets and data")]
+    #[tool(
+        name = "generate_backup_script",
+        description = "Generate a bash script to back up unmanaged configurations, secrets and data"
+    )]
     pub async fn get_backup_script(
         &self,
         params: rmcp::handler::server::wrapper::Parameters<BackupParams>,
@@ -87,7 +93,10 @@ impl NixMigrateServer {
     }
 
     /// Generates a Markdown restoration checklist for the scanned files.
-    #[tool(name = "generate_restore_checklist", description = "Generate a Markdown checklist detailing what was backed up and manual restoration steps")]
+    #[tool(
+        name = "generate_restore_checklist",
+        description = "Generate a Markdown checklist detailing what was backed up and manual restoration steps"
+    )]
     pub async fn get_restore_checklist(
         &self,
         params: rmcp::handler::server::wrapper::Parameters<BackupParams>,
@@ -100,7 +109,9 @@ impl NixMigrateServer {
 /// Runs the Nix Migrate MCP Server over stdio.
 pub async fn run_server() -> anyhow::Result<()> {
     let server = NixMigrateServer::new();
-    let service = server.serve((tokio::io::stdin(), tokio::io::stdout())).await?;
+    let service = server
+        .serve((tokio::io::stdin(), tokio::io::stdout()))
+        .await?;
     service.waiting().await?;
     Ok(())
 }

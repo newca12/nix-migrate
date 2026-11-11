@@ -1,5 +1,5 @@
-use std::path::{Path, PathBuf};
 use std::fs;
+use std::path::{Path, PathBuf};
 
 /// Resolves a path (handling symlinks recursively) and checks if it points to a path under `/nix/store/`.
 /// Returns a tuple of (is_nix, canonicalized_path).
@@ -18,7 +18,8 @@ pub fn resolve_and_check_nix(path: &Path) -> (bool, Option<PathBuf>) {
             if is_symlink {
                 let target = fs::read_link(path);
                 if let Ok(target) = target {
-                    let is_nix = target.starts_with("/nix/store/") || target.to_string_lossy().contains("/nix/store/");
+                    let is_nix = target.starts_with("/nix/store/")
+                        || target.to_string_lossy().contains("/nix/store/");
                     return (is_nix, Some(target));
                 }
             }
@@ -33,7 +34,7 @@ pub fn is_nix_managed_directory(path: &Path) -> bool {
     if !path.exists() {
         return false;
     }
-    
+
     // If it's a symlink, check its destination
     if path.is_symlink() {
         let (is_nix, _) = resolve_and_check_nix(path);

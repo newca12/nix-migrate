@@ -1,6 +1,6 @@
-use std::path::Path;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+use std::path::Path;
 
 #[derive(Debug, Default, Clone)]
 pub struct IgnoreList {
@@ -42,10 +42,10 @@ impl IgnoreList {
                         return true;
                     }
                 }
-                if rel_str == *pattern 
-                    || rel_str.contains(&format!("/{}/", pattern)) 
-                    || rel_str.starts_with(&format!("{}/", pattern)) 
-                    || rel_str.ends_with(&format!("/{}", pattern)) 
+                if rel_str == *pattern
+                    || rel_str.contains(&format!("/{}/", pattern))
+                    || rel_str.starts_with(&format!("{}/", pattern))
+                    || rel_str.ends_with(&format!("/{}", pattern))
                 {
                     return true;
                 }
@@ -86,7 +86,10 @@ mod tests {
         // Testing relative only pattern: node_modules
         assert!(list.is_ignored(&root.join("node_modules"), root));
         assert!(list.is_ignored(&root.join("subfolder").join("node_modules"), root));
-        assert!(list.is_ignored(&root.join("subfolder").join("node_modules").join("nested"), root));
+        assert!(list.is_ignored(
+            &root.join("subfolder").join("node_modules").join("nested"),
+            root
+        ));
 
         // Testing absolute/root prefix pattern: /absolute_only
         assert!(list.is_ignored(&root.join("absolute_only"), root));

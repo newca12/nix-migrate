@@ -1,4 +1,4 @@
-use crate::scanner::traversal::{ScannedItem, Classification};
+use crate::scanner::traversal::{Classification, ScannedItem};
 
 /// Generates a backup bash script from a list of scanned items.
 pub fn generate_backup_script(items: &[ScannedItem]) -> String {
@@ -15,17 +15,22 @@ pub fn generate_backup_script(items: &[ScannedItem]) -> String {
     let backup_items: Vec<&ScannedItem> = items
         .iter()
         .filter(|item| {
-            item.classification != Classification::Managed && item.classification != Classification::Cache
+            item.classification != Classification::Managed
+                && item.classification != Classification::Cache
         })
         .collect();
 
     if backup_items.is_empty() {
-        script.push_str("echo \"No unmanaged configurations, data or secrets found to back up!\"\n");
+        script
+            .push_str("echo \"No unmanaged configurations, data or secrets found to back up!\"\n");
         return script;
     }
 
     script.push_str("# --- Backup Secrets ---\n");
-    let secrets: Vec<&&ScannedItem> = backup_items.iter().filter(|i| i.classification == Classification::Secrets).collect();
+    let secrets: Vec<&&ScannedItem> = backup_items
+        .iter()
+        .filter(|i| i.classification == Classification::Secrets)
+        .collect();
     if secrets.is_empty() {
         script.push_str("echo \"No secrets found.\"\n");
     } else {
@@ -40,7 +45,10 @@ pub fn generate_backup_script(items: &[ScannedItem]) -> String {
     script.push('\n');
 
     script.push_str("# --- Backup Configurations ---\n");
-    let configs: Vec<&&ScannedItem> = backup_items.iter().filter(|i| i.classification == Classification::Config).collect();
+    let configs: Vec<&&ScannedItem> = backup_items
+        .iter()
+        .filter(|i| i.classification == Classification::Config)
+        .collect();
     if configs.is_empty() {
         script.push_str("echo \"No configurations found.\"\n");
     } else {
@@ -55,7 +63,10 @@ pub fn generate_backup_script(items: &[ScannedItem]) -> String {
     script.push('\n');
 
     script.push_str("# --- Backup Data ---\n");
-    let data: Vec<&&ScannedItem> = backup_items.iter().filter(|i| i.classification == Classification::Data).collect();
+    let data: Vec<&&ScannedItem> = backup_items
+        .iter()
+        .filter(|i| i.classification == Classification::Data)
+        .collect();
     if data.is_empty() {
         script.push_str("echo \"No data files found.\"\n");
     } else {
@@ -70,7 +81,10 @@ pub fn generate_backup_script(items: &[ScannedItem]) -> String {
     script.push('\n');
 
     script.push_str("# --- Backup Unknown/Unclassified ---\n");
-    let unknown: Vec<&&ScannedItem> = backup_items.iter().filter(|i| i.classification == Classification::Unknown).collect();
+    let unknown: Vec<&&ScannedItem> = backup_items
+        .iter()
+        .filter(|i| i.classification == Classification::Unknown)
+        .collect();
     if !unknown.is_empty() {
         script.push_str("echo \"Copying unknown/unclassified files...\"\n");
         for item in unknown {
